@@ -1,0 +1,31 @@
+# Chess Tournament - Required Libraries
+# Use exactly these versions to ensure compatibility
+
+# Core chess library
+chess==1.11.2
+
+# Math and numerical operations
+numpy==1.24.0
+scipy==1.10.0
+
+# Machine learning frameworks (choose one or both)
+torch==2.2.2
+
+# Machine learning utilities
+scikit-learn==1.2.0
+
+# Progress tracking and utilities
+tqdm==4.67.1
+pandas==1.5.0
+
+# Note: Python standard library modules are always available:
+# - random
+# - time
+# - collections
+# - itertools
+# - math
+# - functools
+# - copy
+# - argparse
+# - json
+# - pickle
