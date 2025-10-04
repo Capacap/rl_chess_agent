@@ -10,7 +10,7 @@ Replaces random rollouts with:
 import chess
 import torch
 import math
-from typing import Optional, Dict
+from typing import Optional, Dict, Callable, Tuple
 from model.network import ChessNet
 from encoding.state import encode_board
 from encoding.move import encode_move, create_legal_move_mask
@@ -88,35 +88,28 @@ class NeuralMCTSNode:
 
         return max(self.children.values(), key=puct_score)
 
-    def expand(self, network: ChessNet) -> None:
+    def expand(self, inference_fn: Callable[[str], Tuple[dict, float]]) -> None:
         """
-        Expand node with children, using network for priors and evaluation.
+        Expand node with children, using inference function for priors.
 
         Args:
-            network: Neural network for policy/value prediction
+            inference_fn: Function (board_fen) -> (policy_dict, value)
+                         policy_dict = {action_idx: probability}
 
         Side effects:
             - Creates child nodes for all legal moves
             - Sets self.is_expanded = True
         """
-        # Encode board state
-        state = encode_board(self.board)
-
-        # Get legal moves mask
+        # Get legal moves
         legal_moves = list(self.board.legal_moves)
-        mask = create_legal_move_mask(self.board)
-        legal_mask_tensor = torch.tensor([mask], dtype=torch.bool)
 
-        # Forward pass through network (CPU for inference)
-        network.eval()
-        network.cpu()
-        with torch.no_grad():
-            policy, _ = network(state, legal_mask_tensor)
+        # Request inference
+        policy_dict, _ = inference_fn(self.board.fen())
 
         # Create child for each legal move with prior from policy
         for move in legal_moves:
             action_idx = encode_move(move)
-            prior_prob = policy[0, action_idx].item()
+            prior_prob = policy_dict.get(action_idx, 0.0)
 
             new_board = self.board.copy()
             new_board.push(move)
@@ -130,30 +123,18 @@ class NeuralMCTSNode:
 
         self.is_expanded = True
 
-    def evaluate(self, network: ChessNet) -> float:
+    def evaluate(self, inference_fn: Callable[[str], Tuple[dict, float]]) -> float:
         """
-        Evaluate position using value network.
+        Evaluate position using inference function.
 
         Args:
-            network: Neural network for value prediction
+            inference_fn: Function (board_fen) -> (policy_dict, value)
 
         Returns:
             Value in [-1, 1] from current player's perspective
         """
-        # Encode board state
-        state = encode_board(self.board)
-
-        # Get legal mask (needed for forward pass)
-        mask = create_legal_move_mask(self.board)
-        legal_mask_tensor = torch.tensor([mask], dtype=torch.bool)
-
-        # Forward pass (CPU for inference)
-        network.eval()
-        network.cpu()
-        with torch.no_grad():
-            _, value = network(state, legal_mask_tensor)
-
-        return value.item()
+        _, value = inference_fn(self.board.fen())
+        return value
 
     def update(self, value: float) -> None:
         """
@@ -168,7 +149,8 @@ class NeuralMCTSNode:
 
 def mcts_search(
     board: chess.Board,
-    network: ChessNet,
+    network: ChessNet = None,
+    inference_fn: Callable[[str], Tuple[dict, float]] = None,
     num_simulations: int = 40,
     c_puct: float = 1.0
 ) -> Dict[chess.Move, int]:
@@ -177,33 +159,74 @@ def mcts_search(
 
     Args:
         board: Starting position
-        network: Neural network for guidance
+        network: Neural network (creates inference_fn if provided)
+        inference_fn: Inference function (board_fen) -> (policy_dict, value)
         num_simulations: Number of MCTS iterations
         c_puct: Exploration constant
 
     Returns:
         Dictionary mapping moves to visit counts
     """
+    # Create inference function from network if needed
+    if inference_fn is None:
+        if network is None:
+            raise ValueError("Must provide either network or inference_fn")
+        inference_fn = _create_direct_inference(network)
+
     root = NeuralMCTSNode(board)
 
     # Expand root first to get initial children
     if not root.is_terminal():
-        root.expand(network)
+        root.expand(inference_fn)
 
     for _ in range(num_simulations):
-        _mcts_iteration(root, network, c_puct)
+        _mcts_iteration(root, inference_fn, c_puct)
 
     # Return visit counts for each child
     return {move: child.visits for move, child in root.children.items()}
 
 
-def _mcts_iteration(root: NeuralMCTSNode, network: ChessNet, c_puct: float) -> None:
+def _create_direct_inference(network: ChessNet) -> Callable[[str], Tuple[dict, float]]:
+    """
+    Create inference function from network (for backward compatibility).
+
+    Args:
+        network: Neural network
+
+    Returns:
+        Inference function (board_fen) -> (policy_dict, value)
+    """
+    def inference_fn(board_fen: str) -> Tuple[dict, float]:
+        board = chess.Board(board_fen)
+        state = encode_board(board)
+        mask = create_legal_move_mask(board)
+        legal_mask_tensor = torch.tensor([mask], dtype=torch.bool)
+
+        with torch.no_grad():
+            policy, value = network(state, legal_mask_tensor)
+
+        policy_dict = {
+            idx: prob.item()
+            for idx, prob in enumerate(policy[0])
+            if prob > 1e-6
+        }
+
+        return policy_dict, value.item()
+
+    return inference_fn
+
+
+def _mcts_iteration(
+    root: NeuralMCTSNode,
+    inference_fn: Callable[[str], Tuple[dict, float]],
+    c_puct: float
+) -> None:
     """
     Single MCTS iteration: select, expand, evaluate, backpropagate.
 
     Args:
         root: Root node of search tree
-        network: Neural network for evaluation
+        inference_fn: Inference function (board_fen) -> (policy_dict, value)
         c_puct: Exploration constant
     """
     # Phase 1: Selection - traverse tree using PUCT
@@ -225,9 +248,9 @@ def _mcts_iteration(root: NeuralMCTSNode, network: ChessNet, c_puct: float) -> N
         else:
             value = -1.0
     else:
-        # Non-terminal: expand and evaluate with network
-        node.expand(network)
-        value = node.evaluate(network)
+        # Non-terminal: expand and evaluate with inference
+        node.expand(inference_fn)
+        value = node.evaluate(inference_fn)
 
     # Phase 3: Backpropagation
     _backpropagate(search_path, value)

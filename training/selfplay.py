@@ -9,9 +9,10 @@ Uses temperature-based sampling for exploration vs exploitation balance.
 import chess
 import random
 import numpy as np
+import time
 from typing import Dict, List
 from model.network import ChessNet
-from training.mcts_nn import mcts_search, NeuralMCTSNode
+from training.mcts_nn import mcts_search
 from encoding.move import encode_move
 
 
@@ -79,7 +80,7 @@ class SelfPlayWorker:
             # Run MCTS from current position
             visit_counts = mcts_search(
                 board,
-                self.network,
+                network=self.network,
                 num_simulations=self.num_simulations,
                 c_puct=self.c_puct
             )
@@ -122,29 +123,47 @@ class SelfPlayWorker:
 
         return result
 
-    def generate_batch(self, num_games: int, max_moves: int = 200) -> List[Experience]:
+    def generate_batch(
+        self,
+        num_games: int,
+        max_moves: int = 200,
+        num_workers: int = 1
+    ) -> List[Experience]:
         """
-        Generate multiple self-play games.
+        Generate multiple self-play games sequentially.
 
         Args:
             num_games: Number of games to generate
             max_moves: Maximum moves per game
+            num_workers: Ignored (kept for compatibility)
 
         Returns:
             Flattened list of all experiences from all games
         """
+        return self._generate_sequential(num_games, max_moves)
+
+    def _generate_sequential(self, num_games: int, max_moves: int) -> List[Experience]:
+        """Sequential game generation."""
+        import time
         all_experiences = []
+        start_time = time.time()
 
         for game_idx in range(num_games):
+            game_start = time.time()
             game_experiences = self.play_game(max_moves=max_moves)
+            game_time = time.time() - game_start
             all_experiences.extend(game_experiences)
 
-            # Optional logging
-            if (game_idx + 1) % 10 == 0:
-                print(f"Generated {game_idx + 1}/{num_games} games, "
-                      f"{len(all_experiences)} total experiences")
+            # Progress every game (more granular)
+            elapsed = time.time() - start_time
+            avg_time = elapsed / (game_idx + 1)
+            eta = avg_time * (num_games - game_idx - 1)
+
+            print(f"  Game {game_idx + 1}/{num_games}: {len(game_experiences)} exp, "
+                  f"{game_time:.1f}s (avg {avg_time:.1f}s/game, ETA {eta/60:.1f}min)")
 
         return all_experiences
+
 
     def _get_temperature(self, move_count: int) -> float:
         """
@@ -237,3 +256,5 @@ class SelfPlayWorker:
             return 0.0  # Draw
 
         return 1.0 if outcome.winner == chess.WHITE else -1.0
+
+
