@@ -107,7 +107,9 @@ class NeuralMCTSNode:
         mask = create_legal_move_mask(self.board)
         legal_mask_tensor = torch.tensor([mask], dtype=torch.bool)
 
-        # Forward pass through network
+        # Forward pass through network (CPU for inference)
+        network.eval()
+        network.cpu()
         with torch.no_grad():
             policy, _ = network(state, legal_mask_tensor)
 
@@ -145,7 +147,9 @@ class NeuralMCTSNode:
         mask = create_legal_move_mask(self.board)
         legal_mask_tensor = torch.tensor([mask], dtype=torch.bool)
 
-        # Forward pass
+        # Forward pass (CPU for inference)
+        network.eval()
+        network.cpu()
         with torch.no_grad():
             _, value = network(state, legal_mask_tensor)
 

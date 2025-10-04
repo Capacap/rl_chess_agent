@@ -128,8 +128,18 @@ def train_iteration(
     Returns:
         history: Dict with loss history per epoch
     """
+    # Device setup
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    network.to(device)
+
     # Convert experiences to tensors
     states, policy_targets, value_targets, legal_masks = experiences_to_tensors(experiences)
+
+    # Move data to device
+    states = states.to(device)
+    policy_targets = policy_targets.to(device)
+    value_targets = value_targets.to(device)
+    legal_masks = legal_masks.to(device)
 
     # Create data indices for batching
     num_samples = len(experiences)
