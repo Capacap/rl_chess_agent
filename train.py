@@ -94,6 +94,12 @@ def main():
         default=None,
         help="Resume training from checkpoint path"
     )
+    parser.add_argument(
+        "--gdrive-backup-dir",
+        type=str,
+        default=None,
+        help="Google Drive backup directory (Colab only)"
+    )
 
     args = parser.parse_args()
 
@@ -131,7 +137,8 @@ def main():
                 epochs=args.epochs,
                 lr=args.lr,
                 arena_games=args.arena_games,
-                checkpoint_dir=args.checkpoint_dir
+                checkpoint_dir=args.checkpoint_dir,
+                gdrive_backup_dir=args.gdrive_backup_dir
             )
         else:
             # New training run
@@ -145,7 +152,8 @@ def main():
                 epochs=args.epochs,
                 lr=args.lr,
                 arena_games=args.arena_games,
-                checkpoint_dir=args.checkpoint_dir
+                checkpoint_dir=args.checkpoint_dir,
+                gdrive_backup_dir=args.gdrive_backup_dir
             )
 
         print("\n" + "=" * 70)
