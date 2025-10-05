@@ -39,6 +39,7 @@ env/
 # Jupyter Notebook
 .ipynb_checkpoints
 *.ipynb
+!colab/*.ipynb  # Include Colab training notebooks
 
 # Python version file
 .python-version
