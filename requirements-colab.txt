@@ -1,0 +1,14 @@
+# Colab-compatible requirements
+# Colab already has: torch, numpy, scipy, pandas, scikit-learn, tqdm
+# Only install what's missing or needs specific version
+
+# Core chess library
+chess>=1.10.0
+
+# Colab already has compatible versions of:
+# - torch (usually 2.x with CUDA)
+# - numpy (1.x)
+# - scipy (1.x)
+# - pandas (1.x or 2.x)
+# - scikit-learn (1.x)
+# - tqdm (4.x)
