@@ -2,20 +2,18 @@
 selfplay.py
 Self-play game generation for training data.
 
-Policy-only mode: Direct network policy sampling (no MCTS).
-Generates experience tuples: (fen, selected_move, game_outcome)
+Generates experience tuples: (fen, mcts_policy, game_outcome)
 Uses temperature-based sampling for exploration vs exploitation balance.
 """
 
 import chess
 import random
 import numpy as np
-import torch
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List
 from model.network import ChessNet
-from encoding.state import encode_board
-from encoding.move import encode_move, create_legal_move_mask, decode_move
+from training.mcts_nn import mcts_search
+from encoding.move import encode_move
 
 
 # Temperature schedule: {move_number: temperature}
@@ -30,45 +28,43 @@ DEFAULT_TEMP_SCHEDULE = {
 class Experience:
     """Single training experience from self-play."""
 
-    def __init__(self, fen: str, policy: np.ndarray, value: float, move: Optional[chess.Move] = None):
+    def __init__(self, fen: str, policy: np.ndarray, value: float):
         """
         Args:
             fen: Board position as FEN string
-            policy: Policy target (one-hot encoded move or distribution) [4096]
+            policy: MCTS policy distribution [4096]
             value: Game outcome from this position's perspective
-            move: Selected move (for one-hot encoding, optional)
         """
         self.fen = fen
         self.policy = policy
         self.value = value
-        self.move = move
 
 
 class SelfPlayWorker:
-    """Generates training data via self-play games (policy-only, no MCTS)."""
+    """Generates training data via self-play games."""
 
     def __init__(
         self,
         network: ChessNet,
         temp_schedule: Dict[int, float] = None,
-        num_simulations: int = 0,  # Unused in policy-only mode
-        c_puct: float = 1.0  # Unused in policy-only mode
+        num_simulations: int = 40,
+        c_puct: float = 1.0
     ):
         """
         Args:
-            network: Neural network for direct policy inference
+            network: Neural network for MCTS guidance
             temp_schedule: Temperature schedule {move_num: temp}
-            num_simulations: Ignored (kept for API compatibility)
-            c_puct: Ignored (kept for API compatibility)
+            num_simulations: MCTS simulations per move
+            c_puct: MCTS exploration constant
         """
         self.network = network
-        self.network.eval()  # Set to eval mode for inference
         self.temp_schedule = temp_schedule or DEFAULT_TEMP_SCHEDULE
-        self.device = next(network.parameters()).device
+        self.num_simulations = num_simulations
+        self.c_puct = c_puct
 
     def play_game(self, max_moves: int = 200) -> List[Experience]:
         """
-        Play one self-play game using direct policy sampling (no MCTS).
+        Play one self-play game to completion.
 
         Args:
             max_moves: Maximum moves before declaring draw
@@ -77,50 +73,52 @@ class SelfPlayWorker:
             List of experiences with filled game outcomes
         """
         board = chess.Board()
-        experiences: List[Dict] = []
+        experiences: List[Dict] = []  # Store temporarily without outcomes
         move_count = 0
 
-        with torch.no_grad():  # Inference mode
-            while not board.is_game_over() and move_count < max_moves:
-                # Get network policy for current position
-                policy_probs = self._get_policy(board)
+        while not board.is_game_over() and move_count < max_moves:
+            # Run MCTS from current position
+            visit_counts = mcts_search(
+                board,
+                network=self.network,
+                num_simulations=self.num_simulations,
+                c_puct=self.c_puct
+            )
 
-                # Sample move with temperature
-                temp = self._get_temperature(move_count)
-                move = self._sample_move_from_policy(board, policy_probs, temperature=temp)
+            # Convert visit counts to policy distribution
+            mcts_policy = self._visit_counts_to_policy(visit_counts)
 
-                # Record experience with one-hot policy target
-                experiences.append({
-                    'fen': board.fen(),
-                    'move': move,  # Store selected move for one-hot encoding
-                    'value': None  # Placeholder
-                })
+            # Sample move with temperature
+            temp = self._get_temperature(move_count)
+            move = self._sample_move(visit_counts, temperature=temp)
 
-                # Execute move
-                board.push(move)
-                move_count += 1
+            # Record experience (outcome filled later)
+            experiences.append({
+                'fen': board.fen(),
+                'policy': mcts_policy,
+                'value': None  # Placeholder
+            })
+
+            # Execute move
+            board.push(move)
+            move_count += 1
 
         # Backfill game outcome
         if board.is_game_over():
             outcome = self._get_outcome(board)
         else:
-            outcome = 0.0  # Draw by move limit
+            # Hit move limit - treat as draw
+            outcome = 0.0
 
         result = []
+
         for i, exp in enumerate(experiences):
             # Flip outcome for alternating players
             player_outcome = outcome if i % 2 == 0 else -outcome
-
-            # Create one-hot policy target
-            policy_target = np.zeros(4096, dtype=np.float32)
-            action_idx = encode_move(exp['move'])
-            policy_target[action_idx] = 1.0
-
             result.append(Experience(
                 fen=exp['fen'],
-                policy=policy_target,
-                value=player_outcome,
-                move=exp['move']
+                policy=exp['policy'],
+                value=player_outcome
             ))
 
         return result
@@ -167,67 +165,6 @@ class SelfPlayWorker:
         return all_experiences
 
 
-    def _get_policy(self, board: chess.Board) -> np.ndarray:
-        """
-        Get network policy for board position.
-
-        Args:
-            board: Current board state
-
-        Returns:
-            Policy probabilities [4096], masked to legal moves
-        """
-        # Encode board state (already has batch dim [1, 13, 8, 8])
-        state_tensor = encode_board(board).to(self.device)
-
-        # Create legal move mask
-        legal_mask = create_legal_move_mask(board)
-        legal_mask_tensor = torch.tensor(legal_mask, dtype=torch.bool).unsqueeze(0).to(self.device)
-
-        # Forward pass
-        policy, _ = self.network(state_tensor, legal_mask_tensor)
-
-        # Convert to numpy
-        return policy.cpu().numpy()[0]
-
-    def _sample_move_from_policy(
-        self,
-        board: chess.Board,
-        policy_probs: np.ndarray,
-        temperature: float
-    ) -> chess.Move:
-        """
-        Sample move from policy distribution with temperature.
-
-        Args:
-            board: Current board position
-            policy_probs: Policy probabilities [4096]
-            temperature: Sampling temperature
-                - 0: Deterministic (argmax)
-                - 1: Sample proportionally
-                - >1: More exploratory
-
-        Returns:
-            Sampled legal move
-        """
-        legal_moves = list(board.legal_moves)
-        legal_indices = [encode_move(m) for m in legal_moves]
-        legal_probs = policy_probs[legal_indices]
-
-        if temperature < 1e-3:
-            # Deterministic: pick highest probability
-            max_prob = np.max(legal_probs)
-            best_indices = [i for i, p in enumerate(legal_probs) if p == max_prob]
-            return legal_moves[random.choice(best_indices)]
-
-        # Apply temperature
-        probs_temp = legal_probs ** (1.0 / temperature)
-        probs_temp /= probs_temp.sum()
-
-        # Sample
-        chosen_idx = np.random.choice(len(legal_moves), p=probs_temp)
-        return legal_moves[chosen_idx]
-
     def _get_temperature(self, move_count: int) -> float:
         """
         Get temperature for current move number.
@@ -238,12 +175,70 @@ class SelfPlayWorker:
         Returns:
             Temperature value for move sampling
         """
-        # Find highest threshold <= move_count
-        applicable_temps = [(t, temp) for t, temp in self.temp_schedule.items() if move_count >= t]
-        if applicable_temps:
-            return max(applicable_temps, key=lambda x: x[0])[1]
-        # Default to lowest temperature
+        for threshold, temp in sorted(self.temp_schedule.items()):
+            if move_count < threshold:
+                return temp
+        # Return last (lowest) temperature for late game
         return min(self.temp_schedule.values())
+
+    def _sample_move(
+        self,
+        visit_counts: Dict[chess.Move, int],
+        temperature: float
+    ) -> chess.Move:
+        """
+        Sample move from visit distribution with temperature.
+
+        Args:
+            visit_counts: {move: visit_count} from MCTS
+            temperature: Sampling temperature
+                - 0: Deterministic (argmax)
+                - 1: Proportional to visits
+                - >1: More exploratory
+
+        Returns:
+            Sampled move
+        """
+        moves = list(visit_counts.keys())
+        visits = [visit_counts[m] for m in moves]
+
+        if temperature < 1e-3:
+            # Deterministic: pick most visited
+            max_visits = max(visits)
+            best_moves = [m for m, v in zip(moves, visits) if v == max_visits]
+            return random.choice(best_moves)
+
+        # Apply temperature
+        visits_temp = [v ** (1.0 / temperature) for v in visits]
+        total = sum(visits_temp)
+        probs = [v / total for v in visits_temp]
+
+        return random.choices(moves, weights=probs, k=1)[0]
+
+    def _visit_counts_to_policy(
+        self,
+        visit_counts: Dict[chess.Move, int]
+    ) -> np.ndarray:
+        """
+        Convert MCTS visit counts to policy distribution.
+
+        Args:
+            visit_counts: {move: visits} dictionary
+
+        Returns:
+            Policy array [4096] with probabilities summing to 1.0
+        """
+        policy = np.zeros(4096, dtype=np.float32)
+
+        total_visits = sum(visit_counts.values())
+        if total_visits == 0:
+            return policy  # All zeros (shouldn't happen)
+
+        for move, visits in visit_counts.items():
+            action_idx = encode_move(move)
+            policy[action_idx] = visits / total_visits
+
+        return policy
 
     def _get_outcome(self, board: chess.Board) -> float:
         """
