@@ -23,38 +23,56 @@ def training_pipeline(
     num_iterations: int = 10,
     games_per_iter: int = 100,
     num_simulations: int = 40,
+    num_simulations_arena: Optional[int] = None,
     batch_size: int = 256,
     epochs: int = 5,
     lr: float = 1e-3,
     arena_games: int = 50,
     checkpoint_dir: str = "checkpoints",
-    gdrive_backup_dir: Optional[str] = None
+    gdrive_backup_dir: Optional[str] = None,
+    use_adaptive_schedule: bool = False,
+    enable_early_stopping: bool = True
 ) -> ChessNet:
     """
-    Full self-play training pipeline.
+    Full self-play training pipeline with optimization support.
 
     Process:
         1. Generate self-play games with current champion
         2. Train challenger network on experiences
         3. Arena: challenger vs champion
-        4. Replace champion if challenger wins >55% (statistically significant)
+        4. Replace champion if challenger wins threshold
         5. Repeat
 
     Args:
         initial_network: Starting network (None = create new)
         num_iterations: Number of training iterations
-        games_per_iter: Self-play games per iteration
-        num_simulations: MCTS simulations per move
-        batch_size: Training batch size
-        epochs: Training epochs per iteration
-        lr: Learning rate
+        games_per_iter: Self-play games per iteration (ignored if use_adaptive_schedule=True)
+        num_simulations: MCTS simulations per move in self-play
+        num_simulations_arena: MCTS simulations in arena (None = same as num_simulations)
+        batch_size: Training batch size (ignored if use_adaptive_schedule=True)
+        epochs: Training epochs per iteration (ignored if use_adaptive_schedule=True)
+        lr: Learning rate (ignored if use_adaptive_schedule=True)
         arena_games: Number of arena games for evaluation
         checkpoint_dir: Directory for saving checkpoints
         gdrive_backup_dir: Google Drive backup path (None = no backup)
+        use_adaptive_schedule: If True, use progressive schedule from config.py
+        enable_early_stopping: If True, stop training early when loss plateaus
 
     Returns:
         Best network found
     """
+    # Setup adaptive schedule if requested
+    if use_adaptive_schedule:
+        from training import config
+        logger_msg_schedule = "ADAPTIVE (see config.py)"
+    else:
+        config = None
+        logger_msg_schedule = f"games={games_per_iter}, epochs={epochs}, lr={lr}"
+
+    # Arena simulations default to self-play simulations if not specified
+    if num_simulations_arena is None:
+        num_simulations_arena = num_simulations
+
     # Create checkpoint directory
     Path(checkpoint_dir).mkdir(exist_ok=True)
 
@@ -66,10 +84,10 @@ def training_pipeline(
     logger.info("="*60)
     logger.info(f"Checkpoint directory: {checkpoint_dir}")
     logger.info(f"Iterations: {num_iterations}")
-    logger.info(f"Games per iteration: {games_per_iter}")
-    logger.info(f"MCTS simulations: {num_simulations}")
-    logger.info(f"Training: batch_size={batch_size}, epochs={epochs}, lr={lr}")
+    logger.info(f"Schedule: {logger_msg_schedule}")
+    logger.info(f"MCTS simulations: {num_simulations} (self-play), {num_simulations_arena} (arena)")
     logger.info(f"Arena games: {arena_games}")
+    logger.info(f"Early stopping: {'Enabled' if enable_early_stopping else 'Disabled'}")
 
     # Initialize champion network
     if initial_network is None:
@@ -96,6 +114,27 @@ def training_pipeline(
             logger.info(f"Iteration {iteration + 1}/{num_iterations}")
             logger.info("="*60)
 
+            # Get iteration-specific parameters from adaptive schedule
+            if use_adaptive_schedule:
+                iter_config = config.get_iteration_config(iteration + 1)
+                games_per_iter_current = iter_config['games']
+                epochs_current = iter_config['epochs']
+                lr_current = iter_config['lr']
+                batch_size_current = iter_config['batch_size']
+                arena_games_current = config.ARENA_GAMES
+                threshold_current = config.get_replacement_threshold(iteration + 1)
+
+                logger.info(f"Adaptive config: games={games_per_iter_current}, "
+                           f"epochs={epochs_current}, lr={lr_current:.0e}, "
+                           f"threshold={threshold_current:.0%}")
+            else:
+                games_per_iter_current = games_per_iter
+                epochs_current = epochs
+                lr_current = lr
+                batch_size_current = batch_size
+                arena_games_current = arena_games
+                threshold_current = 0.50 if iteration < 5 else 0.55
+
             # Periodic progress notification
             if iteration > 0 and iteration % 3 == 0:
                 elapsed_hours = (time.time() - start_time) / 3600
@@ -104,7 +143,7 @@ def training_pipeline(
 
             # Step 1: Self-play
             logger.info("")
-            logger.info(f"[1/4] Generating {games_per_iter} self-play games...")
+            logger.info(f"[1/4] Generating {games_per_iter_current} self-play games...")
             selfplay_start = time.time()
 
             worker = SelfPlayWorker(
@@ -114,7 +153,7 @@ def training_pipeline(
             )
 
             experiences = worker.generate_batch(
-                games_per_iter,
+                games_per_iter_current,
                 max_moves=200,
                 num_workers=1
             )
@@ -143,22 +182,23 @@ def training_pipeline(
             history = train_iteration(
                 network=challenger,
                 experiences=experiences,
-                batch_size=batch_size,
-                epochs=epochs,
-                lr=lr
+                batch_size=batch_size_current,
+                epochs=epochs_current,
+                lr=lr_current,
+                enable_early_stopping=enable_early_stopping
             )
             train_time = time.time() - train_start
             logger.info(f"Training complete ({train_time:.1f}s)")
 
             # Step 3: Arena evaluation
             logger.info("")
-            logger.info(f"[3/4] Arena: Challenger vs Champion ({arena_games} games)...")
+            logger.info(f"[3/4] Arena: Challenger vs Champion ({arena_games_current} games, {num_simulations_arena} sims)...")
             arena_start = time.time()
             # Move networks to CPU for arena (MCTS runs on CPU)
             challenger.cpu()
             champion.cpu()
-            arena = Arena(num_simulations=num_simulations)
-            results = arena.compete(challenger, champion, num_games=arena_games)
+            arena = Arena(num_simulations=num_simulations_arena)
+            results = arena.compete(challenger, champion, num_games=arena_games_current)
             arena_time = time.time() - arena_start
 
             logger.info("")
@@ -172,12 +212,9 @@ def training_pipeline(
             # Step 4: Replacement decision
             logger.info("")
             logger.info(f"[4/4] Evaluating replacement...")
+            logger.info(f"Replacement threshold: {threshold_current*100:.0f}% (iteration {iteration + 1})")
 
-            # Dynamic threshold: lower for early iterations to ensure champion updates
-            threshold = 0.50 if iteration < 5 else 0.55
-            logger.info(f"Replacement threshold: {threshold*100:.0f}% (iteration {iteration + 1})")
-
-            replaced = should_replace(results['win_rate'], arena_games, threshold=threshold)
+            replaced = should_replace(results['win_rate'], arena_games_current, threshold=threshold_current)
             if replaced:
                 logger.info("✓ Challenger promoted to champion!")
                 champion = challenger
@@ -185,7 +222,7 @@ def training_pipeline(
                 save_checkpoint(champion, f"{checkpoint_dir}/iteration_{iteration + 1}.pt")
                 save_checkpoint_pkl(champion, f"{checkpoint_dir}/iteration_{iteration + 1}.pkl")
             else:
-                logger.info(f"✗ Champion retained (win rate {results['win_rate']:.1%} < threshold {threshold:.1%})")
+                logger.info(f"✗ Champion retained (win rate {results['win_rate']:.1%} < threshold {threshold_current:.1%})")
                 # Save challenger anyway for analysis (only .pt for non-champions)
                 save_checkpoint(challenger, f"{checkpoint_dir}/iteration_{iteration + 1}_challenger.pt")
 

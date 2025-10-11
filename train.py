@@ -67,18 +67,45 @@ def main():
         help="Arena games for evaluation"
     )
 
-    # Network architecture
+    # Network architecture (optimized defaults)
     parser.add_argument(
         "--channels",
         type=int,
-        default=64,
-        help="Number of channels in residual blocks"
+        default=48,
+        help="Number of channels in residual blocks (default: 48 for faster training)"
     )
     parser.add_argument(
         "--blocks",
         type=int,
-        default=4,
-        help="Number of residual blocks"
+        default=3,
+        help="Number of residual blocks (default: 3 for faster training)"
+    )
+
+    # Optimization flags
+    parser.add_argument(
+        "--use-adaptive-schedule",
+        action="store_true",
+        default=True,
+        help="Use progressive training schedule from config.py (recommended)"
+    )
+    parser.add_argument(
+        "--no-adaptive-schedule",
+        action="store_false",
+        dest="use_adaptive_schedule",
+        help="Disable adaptive schedule, use fixed parameters"
+    )
+    parser.add_argument(
+        "--simulations-arena",
+        type=int,
+        default=None,
+        help="MCTS simulations for arena (default: 40 for asymmetric optimization)"
+    )
+    parser.add_argument(
+        "--no-early-stopping",
+        action="store_false",
+        dest="enable_early_stopping",
+        default=True,
+        help="Disable early stopping in training"
     )
 
     # Checkpointing
@@ -110,17 +137,22 @@ def main():
 
     Path(args.checkpoint_dir).mkdir(parents=True, exist_ok=True)
 
+    # Set arena simulations default if not provided
+    if args.simulations_arena is None:
+        args.simulations_arena = 40  # Use higher sims for arena by default
+
     # Print configuration
     print("=" * 70)
-    print("Chess RL Agent Training")
+    print("Chess RL Agent Training (Optimized)")
     print("=" * 70)
     print(f"Checkpoint directory: {args.checkpoint_dir}")
     print(f"Iterations: {args.iterations}")
-    print(f"Games per iteration: {args.games_per_iter}")
-    print(f"MCTS simulations: {args.simulations}")
-    print(f"Network: {args.channels} channels, {args.blocks} blocks")
-    print(f"Training: batch_size={args.batch_size}, epochs={args.epochs}, lr={args.lr}")
-    print(f"Arena: {args.arena_games} games")
+    print(f"Network: {args.channels} channels, {args.blocks} blocks (~500K params)")
+    print(f"MCTS: {args.simulations} sims (self-play), {args.simulations_arena} sims (arena)")
+    print(f"Adaptive schedule: {'Enabled' if args.use_adaptive_schedule else 'Disabled'}")
+    print(f"Early stopping: {'Enabled' if args.enable_early_stopping else 'Disabled'}")
+    if not args.use_adaptive_schedule:
+        print(f"Fixed params: games={args.games_per_iter}, epochs={args.epochs}, lr={args.lr}")
     print("=" * 70)
     print()
 
@@ -133,12 +165,15 @@ def main():
                 num_iterations=args.iterations,
                 games_per_iter=args.games_per_iter,
                 num_simulations=args.simulations,
+                num_simulations_arena=args.simulations_arena,
                 batch_size=args.batch_size,
                 epochs=args.epochs,
                 lr=args.lr,
                 arena_games=args.arena_games,
                 checkpoint_dir=args.checkpoint_dir,
-                gdrive_backup_dir=args.gdrive_backup_dir
+                gdrive_backup_dir=args.gdrive_backup_dir,
+                use_adaptive_schedule=args.use_adaptive_schedule,
+                enable_early_stopping=args.enable_early_stopping
             )
         else:
             # New training run
@@ -148,12 +183,15 @@ def main():
                 num_iterations=args.iterations,
                 games_per_iter=args.games_per_iter,
                 num_simulations=args.simulations,
+                num_simulations_arena=args.simulations_arena,
                 batch_size=args.batch_size,
                 epochs=args.epochs,
                 lr=args.lr,
                 arena_games=args.arena_games,
                 checkpoint_dir=args.checkpoint_dir,
-                gdrive_backup_dir=args.gdrive_backup_dir
+                gdrive_backup_dir=args.gdrive_backup_dir,
+                use_adaptive_schedule=args.use_adaptive_schedule,
+                enable_early_stopping=args.enable_early_stopping
             )
 
         print("\n" + "=" * 70)

@@ -172,17 +172,25 @@ def train_iteration(
     experiences: List[Experience],
     batch_size: int = 256,
     epochs: int = 5,
-    lr: float = 1e-3
+    lr: float = 1e-3,
+    enable_early_stopping: bool = True,
+    min_epochs: int = 2,
+    patience: int = 2,
+    min_improvement: float = 0.01
 ) -> Dict[str, List[float]]:
     """
-    Train network on experience buffer.
+    Train network on experience buffer with optional early stopping.
 
     Args:
         network: ChessNet to train (modified in-place)
         experiences: List of Experience objects
         batch_size: Mini-batch size for SGD
-        epochs: Number of passes through data
+        epochs: Maximum number of passes through data
         lr: Learning rate
+        enable_early_stopping: If True, stop when loss plateaus
+        min_epochs: Minimum epochs before early stopping can trigger
+        patience: Number of epochs without improvement before stopping
+        min_improvement: Minimum relative improvement to count as progress (e.g., 0.01 = 1%)
 
     Returns:
         history: Dict with loss history per epoch
@@ -217,9 +225,13 @@ def train_iteration(
     # Optimizer
     optimizer = torch.optim.Adam(network.parameters(), lr=lr)
 
-    # Training loop
+    # Training loop with early stopping
     network.train()
     history = {'policy': [], 'value': [], 'total': []}
+
+    # Early stopping state
+    best_loss = float('inf')
+    no_improve_count = 0
 
     for epoch in range(epochs):
         # Shuffle data
@@ -272,6 +284,26 @@ def train_iteration(
               f"policy_loss={avg_policy:.4f}, "
               f"value_loss={avg_value:.4f}, "
               f"total_loss={avg_total:.4f}")
+
+        # Early stopping check
+        if enable_early_stopping and epoch >= min_epochs - 1:
+            # Calculate relative improvement
+            if best_loss < float('inf'):
+                improvement = (best_loss - avg_total) / best_loss
+            else:
+                improvement = float('inf')
+
+            if improvement < min_improvement:
+                no_improve_count += 1
+                print(f"  No significant improvement (improvement: {improvement*100:.2f}%, "
+                      f"patience: {no_improve_count}/{patience})")
+
+                if no_improve_count >= patience:
+                    print(f"Early stopping triggered at epoch {epoch+1}/{epochs}")
+                    break
+            else:
+                no_improve_count = 0
+                best_loss = avg_total
 
     return history
 

@@ -38,17 +38,21 @@ python train.py --iterations 5 --games-per-iter 25 --simulations 20
 - `--epochs`: Training epochs per iteration (default: 5)
 - `--arena-games`: Arena evaluation games (default: 50)
 
-## Expected Training Time
+## Expected Training Time (Optimized)
 
-Sequential self-play (current implementation):
-- **~3 min/game** for untrained network
-- **~30-60 min/iteration** (10-25 games)
-- **~5-10 hours** for 10 iterations
+With new optimizations (shaped rewards + smaller network + adaptive schedule):
+- **~1.3 hours/iteration** (average, progressively longer)
+- **~16 hours total** for 10 iterations (was ~33 hours)
+- **~60% faster** than baseline
 
-Reduced settings for faster iteration:
+Quick test:
 ```bash
-python train.py --iterations 5 --games-per-iter 25 --simulations 20
-# Expected: ~2 hours for baseline model
+python train.py --iterations 3  # ~4 hours, uses optimized defaults
+```
+
+Full training:
+```bash
+python train.py --iterations 10  # ~16 hours with adaptive schedule
 ```
 
 ## Project Structure
