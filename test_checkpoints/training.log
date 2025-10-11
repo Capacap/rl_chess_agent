@@ -1,0 +1,132 @@
+2025-10-11 13:54:33 | INFO     | ============================================================
+2025-10-11 13:54:33 | INFO     | Training Pipeline Started
+2025-10-11 13:54:33 | INFO     | ============================================================
+2025-10-11 13:54:33 | INFO     | Checkpoint directory: test_checkpoints
+2025-10-11 13:54:33 | INFO     | Iterations: 1
+2025-10-11 13:54:33 | INFO     | Games per iteration: 2
+2025-10-11 13:54:33 | INFO     | MCTS simulations: 3
+2025-10-11 13:54:33 | INFO     | Training: batch_size=8, epochs=1, lr=0.001
+2025-10-11 13:54:33 | INFO     | Arena games: 2
+2025-10-11 13:54:34 | INFO     | 
+2025-10-11 13:54:34 | INFO     | ============================================================
+2025-10-11 13:54:34 | INFO     | Iteration 1/1
+2025-10-11 13:54:34 | INFO     | ============================================================
+2025-10-11 13:54:34 | INFO     | 
+2025-10-11 13:54:34 | INFO     | [1/4] Generating 2 self-play games...
+2025-10-11 13:55:13 | INFO     | Collected 200 experiences (0.7 min)
+2025-10-11 13:55:13 | INFO     | 
+2025-10-11 13:55:13 | INFO     | [2/4] Training challenger network...
+2025-10-11 13:55:13 | INFO     | Training complete (0.4s)
+2025-10-11 13:55:13 | INFO     | 
+2025-10-11 13:55:13 | INFO     | [3/4] Arena: Challenger vs Champion (2 games)...
+2025-10-11 13:55:21 | INFO     | 
+2025-10-11 13:55:21 | INFO     | Arena results:
+2025-10-11 13:55:21 | INFO     |   Wins: 0
+2025-10-11 13:55:21 | INFO     |   Losses: 0
+2025-10-11 13:55:21 | INFO     |   Draws: 2
+2025-10-11 13:55:21 | INFO     |   Win rate: 50.0%
+2025-10-11 13:55:21 | INFO     |   Time: 0.1 min
+2025-10-11 13:55:21 | INFO     | 
+2025-10-11 13:55:21 | INFO     | [4/4] Evaluating replacement...
+2025-10-11 13:55:21 | INFO     | ✗ Champion retained
+2025-10-11 13:55:21 | INFO     | 
+2025-10-11 13:55:21 | INFO     | Iteration 1 complete
+2025-10-11 13:55:21 | INFO     |   Champion: iteration_0
+2025-10-11 13:55:21 | INFO     |   Time breakdown:
+2025-10-11 13:55:21 | INFO     |     - Self-play: 0.7 min (83.8%)
+2025-10-11 13:55:21 | INFO     |     - Training: 0.4s (0.8%)
+2025-10-11 13:55:21 | INFO     |     - Arena: 0.1 min (15.3%)
+2025-10-11 13:55:21 | INFO     |   Total: 0.8 min
+2025-10-11 13:55:21 | INFO     | 
+2025-10-11 13:55:21 | INFO     | ============================================================
+2025-10-11 13:55:21 | INFO     | Training complete: 1 iterations
+2025-10-11 13:55:21 | INFO     | Final champion: test_checkpoints/iteration_0.pt
+2025-10-11 13:55:21 | INFO     | All checkpoints: 2 files saved
+2025-10-11 13:55:21 | INFO     | ============================================================
+2025-10-11 14:03:18 | INFO     | ============================================================
+2025-10-11 14:03:18 | INFO     | Training Pipeline Started
+2025-10-11 14:03:18 | INFO     | ============================================================
+2025-10-11 14:03:18 | INFO     | Checkpoint directory: test_checkpoints
+2025-10-11 14:03:18 | INFO     | Iterations: 1
+2025-10-11 14:03:18 | INFO     | Games per iteration: 2
+2025-10-11 14:03:18 | INFO     | MCTS simulations: 3
+2025-10-11 14:03:18 | INFO     | Training: batch_size=8, epochs=1, lr=0.001
+2025-10-11 14:03:18 | INFO     | Arena games: 2
+2025-10-11 14:03:18 | INFO     | 
+2025-10-11 14:03:18 | INFO     | ============================================================
+2025-10-11 14:03:18 | INFO     | Iteration 1/1
+2025-10-11 14:03:18 | INFO     | ============================================================
+2025-10-11 14:03:18 | INFO     | 
+2025-10-11 14:03:18 | INFO     | [1/4] Generating 2 self-play games...
+2025-10-11 14:03:51 | INFO     | Collected 170 experiences (0.5 min)
+2025-10-11 14:03:51 | INFO     | 
+2025-10-11 14:03:51 | INFO     | [2/4] Training challenger network...
+2025-10-11 14:03:51 | INFO     | Training complete (0.4s)
+2025-10-11 14:03:51 | INFO     | 
+2025-10-11 14:03:51 | INFO     | [3/4] Arena: Challenger vs Champion (2 games)...
+2025-10-11 14:03:58 | INFO     | 
+2025-10-11 14:03:58 | INFO     | Arena results:
+2025-10-11 14:03:58 | INFO     |   Wins: 0
+2025-10-11 14:03:58 | INFO     |   Losses: 0
+2025-10-11 14:03:58 | INFO     |   Draws: 2
+2025-10-11 14:03:58 | INFO     |   Win rate: 50.0%
+2025-10-11 14:03:58 | INFO     |   Time: 0.1 min
+2025-10-11 14:03:58 | INFO     | 
+2025-10-11 14:03:58 | INFO     | [4/4] Evaluating replacement...
+2025-10-11 14:03:58 | INFO     | ✗ Champion retained
+2025-10-11 14:03:58 | INFO     | 
+2025-10-11 14:03:58 | INFO     | Iteration 1 complete
+2025-10-11 14:03:58 | INFO     |   Champion: iteration_0
+2025-10-11 14:03:58 | INFO     |   Time breakdown:
+2025-10-11 14:03:58 | INFO     |     - Self-play: 0.5 min (81.0%)
+2025-10-11 14:03:58 | INFO     |     - Training: 0.4s (0.9%)
+2025-10-11 14:03:58 | INFO     |     - Arena: 0.1 min (17.9%)
+2025-10-11 14:03:58 | INFO     |   Total: 0.7 min
+2025-10-11 14:03:58 | INFO     | 
+2025-10-11 14:03:58 | INFO     | ============================================================
+2025-10-11 14:03:58 | INFO     | Training complete: 1 iterations
+2025-10-11 14:03:58 | INFO     | Final champion: test_checkpoints/iteration_0.pt
+2025-10-11 14:03:58 | INFO     | All checkpoints: 2 files saved
+2025-10-11 14:03:58 | INFO     | ============================================================
+2025-10-11 14:07:32 | INFO     | ============================================================
+2025-10-11 14:07:32 | INFO     | Training Pipeline Started
+2025-10-11 14:07:32 | INFO     | ============================================================
+2025-10-11 14:07:32 | INFO     | Checkpoint directory: test_checkpoints
+2025-10-11 14:07:32 | INFO     | Iterations: 1
+2025-10-11 14:07:32 | INFO     | Games per iteration: 2
+2025-10-11 14:07:32 | INFO     | MCTS simulations: 3
+2025-10-11 14:07:32 | INFO     | Training: batch_size=8, epochs=1, lr=0.001
+2025-10-11 14:07:32 | INFO     | Arena games: 2
+2025-10-11 14:07:33 | INFO     | 
+2025-10-11 14:07:33 | INFO     | ============================================================
+2025-10-11 14:07:33 | INFO     | Iteration 1/1
+2025-10-11 14:07:33 | INFO     | ============================================================
+2025-10-11 14:07:33 | INFO     | 
+2025-10-11 14:07:33 | INFO     | [1/4] Generating 2 self-play games...
+2025-10-11 14:08:12 | INFO     | Collected 200 experiences (0.7 min)
+2025-10-11 14:08:12 | INFO     | 
+2025-10-11 14:08:12 | INFO     | [2/4] Training challenger network...
+2025-10-11 14:08:13 | INFO     | Training complete (0.4s)
+2025-10-11 14:08:13 | INFO     | 
+2025-10-11 14:08:13 | INFO     | [3/4] Arena: Challenger vs Champion (2 games)...
+2025-10-11 14:43:10 | INFO     | ============================================================
+2025-10-11 14:43:10 | INFO     | Training Pipeline Started
+2025-10-11 14:43:10 | INFO     | ============================================================
+2025-10-11 14:43:10 | INFO     | Checkpoint directory: test_checkpoints
+2025-10-11 14:43:10 | INFO     | Iterations: 1
+2025-10-11 14:43:10 | INFO     | Games per iteration: 2
+2025-10-11 14:43:10 | INFO     | MCTS simulations: 3
+2025-10-11 14:43:10 | INFO     | Training: batch_size=8, epochs=1, lr=0.001
+2025-10-11 14:43:10 | INFO     | Arena games: 2
+2025-10-11 14:43:10 | INFO     | 
+2025-10-11 14:43:10 | INFO     | ============================================================
+2025-10-11 14:43:10 | INFO     | Iteration 1/1
+2025-10-11 14:43:10 | INFO     | ============================================================
+2025-10-11 14:43:10 | INFO     | 
+2025-10-11 14:43:10 | INFO     | [1/4] Generating 2 self-play games...
+2025-10-11 14:43:36 | INFO     | Collected 140 experiences (0.4 min)
+2025-10-11 14:43:36 | INFO     | 
+2025-10-11 14:43:36 | INFO     | [2/4] Training challenger network...
+2025-10-11 14:43:36 | INFO     | Training complete (0.6s)
+2025-10-11 14:43:36 | INFO     | 
+2025-10-11 14:43:36 | INFO     | [3/4] Arena: Challenger vs Champion (2 games)...
