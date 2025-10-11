@@ -2,8 +2,11 @@
 selfplay.py
 Self-play game generation for training data.
 
-Generates experience tuples: (fen, mcts_policy, game_outcome)
+Generates experience tuples: (fen, mcts_policy, value)
 Uses temperature-based sampling for exploration vs exploitation balance.
+
+Supports both pure outcome-based rewards and shaped rewards that include
+intermediate signals (material balance, pawn advancement, piece activity).
 """
 
 import chess
@@ -17,11 +20,12 @@ from encoding.move import encode_move
 
 
 # Temperature schedule: {move_number: temperature}
-# High temp (1.0) = exploration, low temp (0.1) = exploitation
+# High temp (1.5) = exploration, low temp (0.3) = exploitation
+# Increased for better exploration during bootstrapping
 DEFAULT_TEMP_SCHEDULE = {
-    0: 1.0,   # Moves 0-9: High exploration (diverse openings)
-    10: 0.5,  # Moves 10-19: Moderate
-    20: 0.1   # Moves 20+: Near-deterministic (strong endgame)
+    0: 1.5,   # Moves 0-19: High exploration (diverse openings)
+    20: 1.0,  # Moves 20-39: Moderate exploration
+    40: 0.3   # Moves 40+: Low temperature (endgame)
 }
 
 
@@ -62,18 +66,21 @@ class SelfPlayWorker:
         self.num_simulations = num_simulations
         self.c_puct = c_puct
 
-    def play_game(self, max_moves: int = 200) -> List[Experience]:
+    def play_game(self, max_moves: int = 200, use_shaped_rewards: bool = True) -> List[Experience]:
         """
         Play one self-play game to completion.
 
         Args:
             max_moves: Maximum moves before declaring draw
+            use_shaped_rewards: If True, blend game outcome with position values
 
         Returns:
-            List of experiences with filled game outcomes
+            List of experiences with filled values
         """
+        from training.rewards import compute_position_value, REWARD_WEIGHTS
+
         board = chess.Board()
-        experiences: List[Dict] = []  # Store temporarily without outcomes
+        experiences: List[Dict] = []  # Store temporarily without values
         move_count = 0
 
         while not board.is_game_over() and move_count < max_moves:
@@ -92,33 +99,56 @@ class SelfPlayWorker:
             temp = self._get_temperature(move_count)
             move = self._sample_move(visit_counts, temperature=temp)
 
-            # Record experience (outcome filled later)
+            # Record experience (value filled later)
             experiences.append({
                 'fen': board.fen(),
                 'policy': mcts_policy,
-                'value': None  # Placeholder
+                'board': board.copy(),  # Store board for reward computation
+                'player': board.turn    # Track which player's move
             })
 
             # Execute move
             board.push(move)
             move_count += 1
 
-        # Backfill game outcome
+        # Compute final outcome
         if board.is_game_over():
             outcome = self._get_outcome(board)
         else:
             # Hit move limit - treat as draw
             outcome = 0.0
 
+        # Backfill values with shaped rewards or pure outcome
         result = []
+        for exp in experiences:
+            if use_shaped_rewards:
+                # Compute position value
+                position_val = compute_position_value(exp['board'])
 
-        for i, exp in enumerate(experiences):
-            # Flip outcome for alternating players
-            player_outcome = outcome if i % 2 == 0 else -outcome
+                # Convert to player's perspective
+                if exp['player'] == chess.WHITE:
+                    position_val_player = position_val
+                    outcome_player = outcome
+                else:
+                    position_val_player = -position_val
+                    outcome_player = -outcome
+
+                # Weighted combination of outcome and position
+                value = (
+                    REWARD_WEIGHTS['outcome'] * outcome_player +
+                    (1 - REWARD_WEIGHTS['outcome']) * position_val_player
+                )
+            else:
+                # Pure outcome-based (original approach)
+                # Determine player index (0 = white, 1 = black)
+                player_idx = 0 if exp['player'] == chess.WHITE else 1
+                # Flip outcome for black
+                value = outcome if player_idx == 0 else -outcome
+
             result.append(Experience(
                 fen=exp['fen'],
                 policy=exp['policy'],
-                value=player_outcome
+                value=float(value)
             ))
 
         return result

@@ -115,11 +115,25 @@ def training_pipeline(
 
             experiences = worker.generate_batch(
                 games_per_iter,
-                max_moves=100,
+                max_moves=200,
                 num_workers=1
             )
             selfplay_time = time.time() - selfplay_start
             logger.info(f"Collected {len(experiences)} experiences ({selfplay_time/60:.1f} min)")
+
+            # Diagnostic logging for training data quality
+            from training.rewards import compute_position_value
+            import numpy as np
+
+            outcomes = [abs(exp.value) for exp in experiences]
+            decisive_count = sum(1 for v in outcomes if v > 0.3)
+            near_draw_count = sum(1 for v in outcomes if v < 0.1)
+
+            logger.info(f"Self-play data quality:")
+            logger.info(f"  Decisive positions: {decisive_count}/{len(experiences)} ({decisive_count/len(experiences):.1%})")
+            logger.info(f"  Near-draw positions: {near_draw_count}/{len(experiences)} ({near_draw_count/len(experiences):.1%})")
+            logger.info(f"  Value mean: {np.mean([exp.value for exp in experiences]):.3f}")
+            logger.info(f"  Value std: {np.std([exp.value for exp in experiences]):.3f}")
 
             # Step 2: Train challenger
             logger.info("")
@@ -158,7 +172,12 @@ def training_pipeline(
             # Step 4: Replacement decision
             logger.info("")
             logger.info(f"[4/4] Evaluating replacement...")
-            replaced = should_replace(results['win_rate'], arena_games)
+
+            # Dynamic threshold: lower for early iterations to ensure champion updates
+            threshold = 0.50 if iteration < 5 else 0.55
+            logger.info(f"Replacement threshold: {threshold*100:.0f}% (iteration {iteration + 1})")
+
+            replaced = should_replace(results['win_rate'], arena_games, threshold=threshold)
             if replaced:
                 logger.info("✓ Challenger promoted to champion!")
                 champion = challenger
@@ -166,7 +185,7 @@ def training_pipeline(
                 save_checkpoint(champion, f"{checkpoint_dir}/iteration_{iteration + 1}.pt")
                 save_checkpoint_pkl(champion, f"{checkpoint_dir}/iteration_{iteration + 1}.pkl")
             else:
-                logger.info("✗ Champion retained")
+                logger.info(f"✗ Champion retained (win rate {results['win_rate']:.1%} < threshold {threshold:.1%})")
                 # Save challenger anyway for analysis (only .pt for non-champions)
                 save_checkpoint(challenger, f"{checkpoint_dir}/iteration_{iteration + 1}_challenger.pt")
 

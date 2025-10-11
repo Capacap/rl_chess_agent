@@ -1,6 +1,6 @@
 # Chess RL Agent
 
-AlphaZero-style reinforcement learning agent for chess using MCTS and neural networks.
+Reinforcement learning chess agent using MCTS and neural networks with shaped rewards for bootstrapping.
 
 ## Quick Start
 
@@ -15,6 +15,19 @@ python train.py --iterations 5 --games-per-iter 25 --simulations 20
 
 # Training logs saved to: checkpoints/<timestamp>/training.log
 ```
+
+## Training Approach
+
+**Shaped rewards** (v2.0): Hybrid approach combining game outcomes with intermediate position evaluation.
+
+- Material balance (piece values)
+- Pawn advancement (incentivizes promotions)
+- Piece activity (mobility/active play)
+- Game outcome (win/loss/draw)
+
+**Why:** Pure AlphaZero approach (outcome-only) requires massive compute to bootstrap from random initialization. Shaped rewards provide richer learning signal to help the model improve faster with limited resources.
+
+**Documentation:** See [Shaped Rewards Implementation](docs/shaped_rewards_implementation.md) for details.
 
 ## Training Parameters
 
@@ -54,5 +67,6 @@ python train.py --iterations 5 --games-per-iter 25 --simulations 20
 
 - [Project Overview](docs/project_description.md)
 - [Roadmap](docs/roadmap.md)
+- **[Shaped Rewards Implementation](docs/shaped_rewards_implementation.md)** ← Start here for current approach
 - Phase 1: [Plan](docs/phase1_implementation_plan.md) | [Summary](docs/phase1_completion_summary.md)
 - Phase 2: [Plan](docs/phase2_implementation_plan.md) | [Summary](docs/phase2_completion_summary.md)
