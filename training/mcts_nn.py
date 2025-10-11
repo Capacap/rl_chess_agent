@@ -152,7 +152,8 @@ def mcts_search(
     network: ChessNet = None,
     inference_fn: Callable[[str], Tuple[dict, float]] = None,
     num_simulations: int = 40,
-    c_puct: float = 1.0
+    c_puct: float = 1.0,
+    time_budget: float = None
 ) -> Dict[chess.Move, int]:
     """
     Run MCTS search from given position.
@@ -163,10 +164,13 @@ def mcts_search(
         inference_fn: Inference function (board_fen) -> (policy_dict, value)
         num_simulations: Number of MCTS iterations
         c_puct: Exploration constant
+        time_budget: Optional time limit in seconds (90% used as safety margin)
 
     Returns:
         Dictionary mapping moves to visit counts
     """
+    import time
+
     # Create inference function from network if needed
     if inference_fn is None:
         if network is None:
@@ -179,7 +183,15 @@ def mcts_search(
     if not root.is_terminal():
         root.expand(inference_fn)
 
-    for _ in range(num_simulations):
+    # Time-based cutoff if budget specified
+    start_time = time.time() if time_budget else None
+    safety_margin = 0.9  # Use 90% of budget to account for overhead
+
+    for sim in range(num_simulations):
+        # Check time budget before each simulation
+        if time_budget and (time.time() - start_time) > (time_budget * safety_margin):
+            break
+
         _mcts_iteration(root, inference_fn, c_puct)
 
     # Return visit counts for each child

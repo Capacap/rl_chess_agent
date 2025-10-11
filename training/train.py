@@ -108,6 +108,65 @@ def experiences_to_tensors(
     return states_batch, policies_batch, values_batch, masks_batch
 
 
+def compute_training_metrics(
+    experiences: List[Experience],
+    network: ChessNet,
+    device: torch.device
+) -> Dict[str, float]:
+    """
+    Compute diagnostic metrics for training data quality.
+
+    Args:
+        experiences: Training experiences
+        network: Network to evaluate
+        device: Torch device
+
+    Returns:
+        Dictionary with metrics
+    """
+    from scipy.stats import entropy as scipy_entropy
+
+    # Sample subset for efficiency (100 random experiences)
+    sample_size = min(100, len(experiences))
+    sample_indices = np.random.choice(len(experiences), sample_size, replace=False)
+
+    policy_entropies = []
+    value_accuracies = []
+    move_diversity = set()
+
+    for idx in sample_indices:
+        exp = experiences[idx]
+
+        # Policy entropy (measure of exploration)
+        policy = np.array(exp.policy)
+        nonzero_policy = policy[policy > 1e-8]
+        if len(nonzero_policy) > 0:
+            policy_entropies.append(scipy_entropy(nonzero_policy))
+
+        # Move diversity (unique moves selected)
+        move_idx = np.argmax(policy)
+        move_diversity.add(move_idx)
+
+        # Value accuracy (how well network predicts outcomes)
+        board = chess.Board(exp.fen)
+        state = encode_board(board).to(device)
+        mask = create_legal_move_mask(board)
+        mask_tensor = torch.tensor([mask], dtype=torch.bool).to(device)
+
+        with torch.no_grad():
+            _, value_pred = network(state, mask_tensor)
+
+        # Value accuracy: sign agreement
+        sign_correct = (value_pred.item() * exp.value) > 0
+        value_accuracies.append(1.0 if sign_correct else 0.0)
+
+    return {
+        'policy_entropy': float(np.mean(policy_entropies)) if policy_entropies else 0.0,
+        'move_diversity': len(move_diversity) / sample_size,
+        'value_accuracy': float(np.mean(value_accuracies)) if value_accuracies else 0.0
+    }
+
+
 def train_iteration(
     network: ChessNet,
     experiences: List[Experience],
@@ -131,6 +190,16 @@ def train_iteration(
     # Device setup
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     network.to(device)
+
+    # Compute pre-training metrics
+    print("Computing training metrics...")
+    metrics = compute_training_metrics(experiences, network, device)
+    print(f"  Policy entropy: {metrics['policy_entropy']:.3f} "
+          f"(higher = more exploration)")
+    print(f"  Move diversity: {metrics['move_diversity']:.2%} "
+          f"(unique moves / total)")
+    print(f"  Value accuracy: {metrics['value_accuracy']:.2%} "
+          f"(pre-training sign agreement)")
 
     # Convert experiences to tensors
     states, policy_targets, value_targets, legal_masks = experiences_to_tensors(experiences)
@@ -219,6 +288,42 @@ def save_checkpoint(network: ChessNet, file_path: str) -> None:
     print(f"Checkpoint saved: {file_path}")
 
 
+def save_checkpoint_pkl(network: ChessNet, file_path: str) -> None:
+    """
+    Save network weights to pickle file for tournament submission.
+
+    Args:
+        network: ChessNet to save
+        file_path: Output file path (.pkl extension)
+    """
+    import pickle
+    import os
+
+    # Save state dict along with architecture parameters
+    checkpoint_data = {
+        'state_dict': network.state_dict(),
+        'channels': network.channels,
+        'num_blocks': network.num_blocks
+    }
+
+    with open(file_path, 'wb') as f:
+        pickle.dump(checkpoint_data, f)
+
+    # Validate file size
+    file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+    size_limit_mb = 2048  # 2GB limit
+
+    print(f"Pickle checkpoint saved: {file_path}")
+    print(f"  File size: {file_size_mb:.1f} MB")
+
+    if file_size_mb > size_limit_mb:
+        print(f"  ⚠️  WARNING: File exceeds {size_limit_mb} MB tournament limit!")
+    elif file_size_mb > size_limit_mb * 0.9:
+        print(f"  ⚠️  CAUTION: File size approaching {size_limit_mb} MB limit")
+    else:
+        print(f"  ✓ File size within tournament limits")
+
+
 def load_checkpoint(network: ChessNet, file_path: str) -> None:
     """
     Load network weights from file.
@@ -230,3 +335,32 @@ def load_checkpoint(network: ChessNet, file_path: str) -> None:
     network.load_state_dict(torch.load(file_path))
     network.eval()
     print(f"Checkpoint loaded: {file_path}")
+
+
+def load_checkpoint_pkl(file_path: str) -> ChessNet:
+    """
+    Load network from pickle file.
+
+    Args:
+        file_path: Pickle checkpoint file path
+
+    Returns:
+        ChessNet with loaded weights
+    """
+    import pickle
+
+    with open(file_path, 'rb') as f:
+        checkpoint_data = pickle.load(f)
+
+    # Reconstruct network with saved architecture
+    network = ChessNet(
+        channels=checkpoint_data['channels'],
+        num_blocks=checkpoint_data['num_blocks']
+    )
+
+    # Load weights
+    network.load_state_dict(checkpoint_data['state_dict'])
+    network.eval()
+
+    print(f"Pickle checkpoint loaded: {file_path}")
+    return network

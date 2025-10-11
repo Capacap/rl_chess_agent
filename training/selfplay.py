@@ -175,11 +175,18 @@ class SelfPlayWorker:
         Returns:
             Temperature value for move sampling
         """
-        for threshold, temp in sorted(self.temp_schedule.items()):
-            if move_count < threshold:
-                return temp
-        # Return last (lowest) temperature for late game
-        return min(self.temp_schedule.values())
+        # Find the largest threshold <= move_count
+        applicable_temp = None
+        for threshold, temp in sorted(self.temp_schedule.items(), reverse=True):
+            if move_count >= threshold:
+                applicable_temp = temp
+                break
+
+        # Fallback to highest temperature (shouldn't happen with threshold 0)
+        if applicable_temp is None:
+            applicable_temp = max(self.temp_schedule.values())
+
+        return applicable_temp
 
     def _sample_move(
         self,

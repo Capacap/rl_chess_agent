@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Optional
 from model.network import ChessNet
 from training.selfplay import SelfPlayWorker, DEFAULT_TEMP_SCHEDULE
-from training.train import train_iteration, save_checkpoint, load_checkpoint
+from training.train import train_iteration, save_checkpoint, save_checkpoint_pkl, load_checkpoint
 from training.arena import Arena, should_replace
 from training.logger import setup_logger
 
@@ -79,8 +79,9 @@ def training_pipeline(
         champion = initial_network
         print("Using provided initial network")
 
-    # Save initial network
+    # Save initial network in both formats
     save_checkpoint(champion, f"{checkpoint_dir}/iteration_0.pt")
+    save_checkpoint_pkl(champion, f"{checkpoint_dir}/iteration_0.pkl")
 
     # Training loop
     start_time = time.time()
@@ -161,11 +162,17 @@ def training_pipeline(
             if replaced:
                 logger.info("✓ Challenger promoted to champion!")
                 champion = challenger
+                # Save in both formats
                 save_checkpoint(champion, f"{checkpoint_dir}/iteration_{iteration + 1}.pt")
+                save_checkpoint_pkl(champion, f"{checkpoint_dir}/iteration_{iteration + 1}.pkl")
             else:
                 logger.info("✗ Champion retained")
-                # Save challenger anyway for analysis
+                # Save challenger anyway for analysis (only .pt for non-champions)
                 save_checkpoint(challenger, f"{checkpoint_dir}/iteration_{iteration + 1}_challenger.pt")
+
+            # Cleanup old checkpoints to save disk space
+            if iteration > 2:  # Keep at least 3 iterations
+                _cleanup_old_checkpoints(checkpoint_dir, keep_last_n=3, logger=logger)
 
             # Backup to Google Drive if configured
             if gdrive_backup_dir:
@@ -244,6 +251,42 @@ def _clone_network(network: ChessNet) -> ChessNet:
     clone.load_state_dict(network.state_dict())
 
     return clone
+
+
+def _cleanup_old_checkpoints(
+    checkpoint_dir: str,
+    keep_last_n: int = 3,
+    logger = None
+) -> None:
+    """
+    Remove old challenger checkpoints to save disk space.
+
+    Keeps:
+    - All champion checkpoints (iteration_N.pt/pkl)
+    - Last N challenger checkpoints (iteration_N_challenger.pt)
+
+    Args:
+        checkpoint_dir: Checkpoint directory
+        keep_last_n: Number of recent challengers to keep
+        logger: Logger instance
+    """
+    try:
+        checkpoint_path = Path(checkpoint_dir)
+
+        # Find all challenger checkpoints
+        challengers = sorted(checkpoint_path.glob("*_challenger.pt"))
+
+        # Keep only last N
+        if len(challengers) > keep_last_n:
+            to_delete = challengers[:-keep_last_n]
+            for checkpoint_file in to_delete:
+                checkpoint_file.unlink()
+                if logger:
+                    logger.info(f"Cleaned up: {checkpoint_file.name}")
+
+    except Exception as e:
+        if logger:
+            logger.warning(f"Checkpoint cleanup failed: {e}")
 
 
 def _backup_to_gdrive(
