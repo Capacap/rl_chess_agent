@@ -40,19 +40,19 @@ SCHEDULE = {
 }
 
 # Arena configuration (smaller for speed)
-ARENA_GAMES = 16
+ARENA_GAMES = 20  # Increased from 16 for better statistical power
 
-# Replacement thresholds (adjusted for smaller arena)
-# With 16 games, need 9+ wins (56.25%) for statistical significance
-EARLY_THRESHOLD = 0.56   # Iterations 1-5
-LATE_THRESHOLD = 0.58    # Iterations 6-10
+# Replacement thresholds (adjusted for shaped rewards bootstrapping)
+# With 20 games, need 10-11 wins (52%) which is reasonable with shaped rewards
+EARLY_THRESHOLD = 0.52   # Iterations 1-5 (lowered to allow more updates)
+LATE_THRESHOLD = 0.56    # Iterations 6-10 (slightly stricter when converging)
 
 # Early stopping configuration
 ENABLE_EARLY_STOPPING = True
-MIN_EPOCHS = 2                # Always train at least this many epochs
+MIN_EPOCHS = 3                # Always train at least this many epochs (was 2)
 MAX_EPOCHS = 10               # Never train more than this (fallback)
-PATIENCE = 2                  # Stop after this many epochs without improvement
-MIN_IMPROVEMENT = 0.01        # Minimum relative improvement (1%)
+PATIENCE = 3                  # Stop after this many epochs without improvement (was 2)
+MIN_IMPROVEMENT = 0.005       # Minimum relative improvement (0.5%, was 1%)
 
 # Game limits
 MAX_MOVES_SELFPLAY = 200
@@ -113,7 +113,7 @@ def estimate_iteration_time(iteration: int) -> float:
     # Time estimates (rough)
     # Self-play: ~1.5 min/game with 12 sims and smaller network
     # Training: ~0.2 min/epoch with smaller network
-    # Arena: ~2 min/game with 40 sims
+    # Arena: ~2 min/game with 40 sims (20 games now)
 
     selfplay_time = config['games'] * 1.5
     training_time = config['epochs'] * 0.2

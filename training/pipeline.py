@@ -16,6 +16,7 @@ from training.selfplay import SelfPlayWorker, DEFAULT_TEMP_SCHEDULE
 from training.train import train_iteration, save_checkpoint, save_checkpoint_pkl, load_checkpoint
 from training.arena import Arena, should_replace
 from training.logger import setup_logger
+from training.rewards import REWARD_WEIGHTS
 
 
 def training_pipeline(
@@ -87,6 +88,7 @@ def training_pipeline(
     logger.info(f"Schedule: {logger_msg_schedule}")
     logger.info(f"MCTS simulations: {num_simulations} (self-play), {num_simulations_arena} (arena)")
     logger.info(f"Arena games: {arena_games}")
+    logger.info(f"Shaped rewards: ENABLED (material={REWARD_WEIGHTS['material']}, pawn={REWARD_WEIGHTS['pawn_advancement']}, activity={REWARD_WEIGHTS['piece_activity']}, outcome={REWARD_WEIGHTS['outcome']})")
     logger.info(f"Early stopping: {'Enabled' if enable_early_stopping else 'Disabled'}")
 
     # Initialize champion network
