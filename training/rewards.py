@@ -27,11 +27,12 @@ PIECE_VALUES = {
 }
 
 # Reward component weights (tunable)
+# Increased intermediate rewards to provide stronger learning signal during bootstrapping
 REWARD_WEIGHTS = {
-    'material': 1.0,        # Core signal - don't lose pieces
-    'pawn_advancement': 0.3,  # Encourage pushing pawns
-    'piece_activity': 0.2,   # Encourage active play
-    'outcome': 0.5           # Final game result (scaled down from 1.0)
+    'material': 2.0,        # Core signal - don't lose pieces (increased from 1.0)
+    'pawn_advancement': 0.6,  # Encourage pushing pawns (increased from 0.3)
+    'piece_activity': 0.4,   # Encourage active play (increased from 0.2)
+    'outcome': 0.3           # Final game result (reduced from 0.5 to emphasize position value)
 }
 
 
@@ -56,8 +57,8 @@ def compute_position_value(board: chess.Board) -> float:
     )
 
     # Normalize to [-1, 1] range
-    # Max possible: 1.0 + 0.3 + 0.2 = 1.5
-    value = value / 1.5
+    # Max possible: 2.0 + 0.6 + 0.4 = 3.0
+    value = value / 3.0
 
     return float(np.clip(value, -1.0, 1.0))
 
